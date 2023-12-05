@@ -60,5 +60,5 @@ for _, entry in rating_df.iterrows():
         i += 1
 
 # Save this to a JSON file :
-with open('movies_rating.json', 'w') as f:
+with open('api/movies_rating.json', 'w') as f:
     json.dump(result, f)
