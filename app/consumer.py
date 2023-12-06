@@ -6,7 +6,6 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from elasticsearch import Elasticsearch
 
-
 # Create spark session :
 spark = SparkSession.builder \
     .appName("MovieRecommender_consumer") \
@@ -21,11 +20,8 @@ kafka_data = spark.readStream \
     .option("subscribe", "MovieRecommender") \
     .load()
 
-print("____________________________data is loaded _____________________")
 # Specify the value deserializer :
 kafka_data = kafka_data.selectExpr("CAST(value AS STRING)")
-
-print("____________________________ Casting data _____________________")
 
 # Define the schema
 schema = StructType([
@@ -41,11 +37,19 @@ schema = StructType([
     StructField("userId", IntegerType())
 ])
 
-
 # change parce to json :
-kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data"))\
+kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data")).select("data.*")
 
-
+# Print the schema of my Data :
 kafka_data.printSchema()
 
-kafka_data.writeStream.outputMode("append").format("console").start().awaitTermination()
+
+# Write the DataFrame to Elasticsearch using writeStream
+kafka_data.writeStream \
+    .format("org.elasticsearch.spark.sql") \
+    .outputMode("append") \
+    .option("es.resource", "bb") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("checkpointLocation", "./checkpoint/") \
+    .start().awaitTermination()
