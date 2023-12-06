@@ -6,6 +6,41 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from elasticsearch import Elasticsearch
 
+
+
+# Define the Elasticsearch server and index name :
+es_server = "http://localhost:9200/"
+index_name = "bb"
+
+try :
+    # Create an Elasticsearch client :
+    es = Elasticsearch([es_server])
+    print("coonection is succefulty")
+except :
+    print("connection problem")
+# Define the mapping for index :
+mapping = {
+    "mappings": {
+            "properties": {
+                "age": {"type": "integer"},
+                "gender": {"type": "keyword"},
+                "movie": {
+                    "properties": {
+                        "genres": {"type": "keyword"},
+                        "movieId": {"type": "integer"},
+                        "title": {"type": "text"}
+                    }
+                },
+                "rating": {"type": "integer"},
+                "timestamp": {"type": "date"},
+                "userId": {"type": "integer"}
+            }
+    }
+}
+
+# Create the index with the specified mapping :
+es.indices.create(index=index_name, body=mapping)
+
 # Create spark session :
 spark = SparkSession.builder \
     .appName("MovieRecommender_consumer") \
