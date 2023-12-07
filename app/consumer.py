@@ -3,9 +3,9 @@ findspark.init()
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType,StructField,IntegerType,StringType,ArrayType
 from elasticsearch import Elasticsearch
-
+from  info_sensetive import cloud_id,api_key,endpoint_elastic,password,DateType
 
 
 def create_maping_local() :
@@ -42,18 +42,20 @@ def create_maping_local() :
     # Create the index with the specified mapping :
     es.indices.create(index=index_name, body=mapping)
 
-# Specify the Elasticsearch Cloud credentials and endpoint :
-cloud_id = "fe0889c7219f4abda8c4968ab721e709:dXMtY2VudHJhbDEuZ2NwLmNsb3VkLmVzLmlvOjQ0MyQxMzRhYTE1ODE1Y2M0NGJmODQxNmFkNmI2NGEzM2JhZSQwZTYyYWY0Mjk0ZWE0Y2RhODBiMmYxZDZiM2U0OTEwNA=="
-api_key = "UVZWTlA0d0JQazllek5fZ3h2WDU6VWZYdHlVOHdTQS1MMXJFLXlQbzI2Zw=="
-endpoint_elastic = "https://134aa15815cc44bf8416ad6b64a33bae.us-central1.gcp.cloud.es.io"
-
 def create_maping_cloud(cloud_id,api_key) :
-    es = Elasticsearch(cloud_id=cloud_id, api_key=api_key)
+    try :
+        es = Elasticsearch(cloud_id=cloud_id, api_key=api_key)
 
-    index_name = "movierec"
+    except Exception as e:
+        print(f"Error Elastecsearch Connection: {e}")
+
+
+
+    index_name = "movierec_index"
     mapping = {
         "mappings": {
                 "properties": {
+                    "id": {"type": "keyword"},
                     "age": {"type": "integer"},
                     "gender": {"type": "keyword"},
                     "movie": {
@@ -70,17 +72,21 @@ def create_maping_cloud(cloud_id,api_key) :
         }
     }
 
-    # Create the index with the specified mapping :
-    if not es.indices.exists(index=index_name):
-        # Create the index with the specified mapping
-        es.indices.create(index=index_name, body=mapping)
-        print(f"Index '{index_name}' created with mapping.")
-    else:
-        print(f"Index '{index_name} is already exists")
+    try :
+        # Create the index with the specified mapping :
+        if not es.indices.exists(index=index_name):
+            es.indices.create(index=index_name, body=mapping)
+            print(f"Index '{index_name}' created with mapping.")
 
+        else:
+            es.indices.delete(index=index_name)
+            es.indices.create(index=index_name, body=mapping)
+            print(f"Index '{index_name} is already exists")
+
+    except Exception as e:
+            print(f"Error Creation index: {e} ")
 
 create_maping_cloud(cloud_id,api_key)
-
 
 # Create spark session :
 spark = SparkSession.builder \
@@ -101,6 +107,7 @@ kafka_data = kafka_data.selectExpr("CAST(value AS STRING)")
 
 # Define the schema
 schema = StructType([
+    StructField("id", StringType()),
     StructField("age", IntegerType()),
     StructField("gender", StringType()),
     StructField("movie", StructType([
@@ -114,12 +121,13 @@ schema = StructType([
 ])
 
 # change parce to json :
-kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data")).select("data.*")
+kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data")).select("data.*")\
+             .withColumn("timestamp", from_unixtime("timestamp").cast(DateType()))
 
 # Print the schema of my Data :
 kafka_data.printSchema()
 
-# Write the DataFrame to Elasticsearch locale using writeStream
+# Write the DataFrame to Elasticsearch locale :
 #query = kafka_data.writeStream \
 #     .format("org.elasticsearch.spark.sql") \
 #     .outputMode("append") \
@@ -128,18 +136,19 @@ kafka_data.printSchema()
 #     .option("es.port", "9200") \
 #     .option("checkpointLocation", "./checkpoint/") \
 
-
+#  Write the DataFrame to Elasticsearch cloud  :
 query = kafka_data.writeStream \
     .format("org.elasticsearch.spark.sql") \
     .outputMode("append") \
-    .option("es.resource", "movierec") \
+    .option("es.resource", "movierec_index") \
     .option("es.nodes", endpoint_elastic) \
     .option("es.port", "9243") \
     .option("es.net.http.auth.user", "elastic") \
-    .option("es.net.http.auth.pass", 'ii6ujXd91w9XisLrg56ujeNU') \
+    .option("es.net.http.auth.pass", password) \
     .option("es.nodes.wan.only", "true") \
+    .option("es.mapping.id", "id") \
     .option("es.write.operation", "index") \
-    .option("checkpointLocation", "./checkpoint/") \
+    .option("checkpointLocation", "./checkpoint/")
 
 try :
     query.start().awaitTermination()
