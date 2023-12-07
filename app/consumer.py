@@ -2,16 +2,16 @@ import findspark
 findspark.init()
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import StructType,StructField,IntegerType,StringType,ArrayType
+from pyspark.sql.functions import from_unixtime,date_format,col,from_json
+from pyspark.sql.types import StructType,StructField,IntegerType,StringType,ArrayType,DateType
 from elasticsearch import Elasticsearch
-from  info_sensetive import cloud_id,api_key,endpoint_elastic,password,DateType
+from  info_sensetive import cloud_id,api_key,endpoint_elastic,password
 
 
 def create_maping_local() :
     # Define the Elasticsearch server and index name :
     es_server = "http://localhost:9200/"
-    index_name = "movierec"
+    index_name = "movierec_index"
 
     try :
         # Create an Elasticsearch client :
@@ -40,7 +40,21 @@ def create_maping_local() :
     }
 
     # Create the index with the specified mapping :
-    es.indices.create(index=index_name, body=mapping)
+    try :
+        # Create the index with the specified mapping :
+        if not es.indices.exists(index=index_name):
+            es.indices.create(index=index_name)
+            print(f"Index '{index_name}' created with mapping.")
+
+        else:
+            es.indices.delete(index=index_name)
+            es.indices.create(index=index_name)
+            print(f"Index '{index_name} is already exists")
+
+    except Exception as e:
+            print(f"Error Creation index: {e} ")
+
+# create_maping_local()
 
 def create_maping_cloud(cloud_id,api_key) :
     try :
@@ -62,7 +76,7 @@ def create_maping_cloud(cloud_id,api_key) :
                         "properties": {
                             "genres": {"type": "keyword"},
                             "movieId": {"type": "integer"},
-                            "title": {"type": "text"}
+                            "title": {"type": "keyword"}
                         }
                     },
                     "rating": {"type": "integer"},
@@ -92,7 +106,7 @@ create_maping_cloud(cloud_id,api_key)
 spark = SparkSession.builder \
     .appName("MovieRecommender_consumer") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.4,"\
-    "org.elasticsearch:elasticsearch-spark-30_2.12:8.11.1,") \
+    "org.elasticsearch:elasticsearch-spark-30_2.12:8.11.0,") \
     .getOrCreate()
 
 # Read data from Kafka :
@@ -122,16 +136,20 @@ schema = StructType([
 
 # change parce to json :
 kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data")).select("data.*")\
-             .withColumn("timestamp", from_unixtime("timestamp").cast(DateType()))
+
+kafka_data = kafka_data.withColumn(
+    "timestamp",
+    date_format(from_unixtime(col("timestamp").cast("double")), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+)
 
 # Print the schema of my Data :
 kafka_data.printSchema()
 
 # Write the DataFrame to Elasticsearch locale :
-#query = kafka_data.writeStream \
+# query = kafka_data.writeStream \
 #     .format("org.elasticsearch.spark.sql") \
 #     .outputMode("append") \
-#     .option("es.resource", "movierec") \
+#     .option("es.resource", "movierec_index") \
 #     .option("es.nodes", "localhost") \
 #     .option("es.port", "9200") \
 #     .option("checkpointLocation", "./checkpoint/") \
