@@ -1,7 +1,6 @@
 
 import pandas as pd
-import json
-
+import json,uuid
 
 # change txt file to dataframe :
 def change_to_df(filpath,splitter,columns) :
@@ -43,6 +42,7 @@ for _, entry in rating_df.iterrows():
         genres = [genre for genre, value in movie_data.items() if value == 1 and genre != 'movieId']
 
         fishies_entry = {
+            'id' : str(uuid.uuid4()),
             'userId': user_id,
             'age': age,
             'gender' :gender,
