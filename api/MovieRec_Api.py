@@ -4,7 +4,7 @@ from flask import Flask, jsonify, abort
 app = Flask(__name__)
 
 # Read JSON data from file :
-with open('api/movies_rating.json') as f:
+with open('api/movies.json') as f:
     json_data = json.load(f)
 
 @app.route('/api/movies', methods=['GET'])
@@ -32,9 +32,9 @@ def get_user_by_id(user_id):
     else :
         abort(404, f'User with ID {user_id} not found')
 
-@app.route('/api/movies/<int:movie_id>', methods=['GET'])
+@app.route('/api/movie/<int:movie_id>', methods=['GET'])
 def get_movie_by_id(movie_id) :
-    movies = [item for item in json_data if item["movie"]["movieId"] == movie_id]
+    movies = [item for item in json_data if item["movieId"] == movie_id]
     if movies:
         return jsonify(movies)
     else:
