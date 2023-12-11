@@ -2,10 +2,10 @@ import findspark
 findspark.init()
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_unixtime,date_format,col,from_json,expr,lit,when,array,to_date,udf
+from pyspark.sql.functions import from_unixtime,date_format,col,from_json,expr,lit,when,array,to_date,udf,unix_timestamp
 from pyspark.sql.types import StructType,StructField,IntegerType,StringType,ArrayType,DateType,FloatType
 from elasticsearch import Elasticsearch
-from  info_sensetive import cloud_id,api_key,endpoint_elastic,password
+from  info import cloud_id,api_key,endpoint_elastic,password
 import threading
 
 
@@ -30,15 +30,19 @@ def create_maping_cloud(cloud_id,api_key,mapping,index_name) :
     except Exception as e :
             print(f"Error Creation index: {e}")
 
-mapping_user = {
+mapping_rating = {
     "mappings": {
             "properties": {
                 "userId": {"type": "integer"},
                 "age": {"type": "integer"},
                 "gender": {"type": "keyword"},
+                "release_date": {"type": "date"},
                 "timestamp": {"type": "date"},
                 "rating": {"type": "integer"},
                 "movieId": {"type": "integer"},
+                "movie_title": {"type": "keyword"},
+                "genres": {"type": "keyword"},
+
                 }
             }
     }
@@ -47,16 +51,26 @@ mapping_movie = {
     "mappings": {
             "properties": {
                 "movieId": {"type": "integer"},
-                "title": {"type": "keyword"},
+                "movie_title": {"type": "keyword"},
                 "release_date": {"type": "date"},
                 "genres": {"type": "keyword"}
                 }
             }
     }
 
+mapping_user = {
+    "mappings": {
+            "properties": {
+                "userId": {"type": "integer"},
+                "age": {"type": "integer"},
+                "gender": {"type": "keyword"}
+                }
+            }
+    }
 
-create_maping_cloud(cloud_id,api_key,mapping_user,"movies_user_rating")
-create_maping_cloud(cloud_id,api_key,mapping_movie,"movies_info")
+create_maping_cloud(cloud_id,api_key,mapping_rating,"movies-user_rating")
+create_maping_cloud(cloud_id,api_key,mapping_movie,"movies-info")
+create_maping_cloud(cloud_id,api_key,mapping_user,"user-info")
 
 # Create spark session :
 spark = SparkSession.builder \
@@ -107,7 +121,7 @@ schema = StructType([
     StructField("userId", IntegerType()),
 ])
 
-# parce data to dataframe : 
+# Parce data to dataframe : 
 kafka_data = kafka_data.select(from_json(col("value"),schema=schema).alias("data")).select("data.*")\
      
 # Filter out rows with at least one null value in any column :
@@ -126,10 +140,10 @@ genre_columns = ["Action", "Adventure", "Animation", "Children's", "Comedy", "Cr
 # Replace values with column name if 1, else with space :
 kafka_data = kafka_data.withColumn("genre", array(*[when(col(column) == 1, column).otherwise(lit('')) for column in genre_columns]))
 
-# remove empty strings from the "genre" list :
+# Remove empty strings from the "genre" list :
 kafka_data = kafka_data.withColumn("genre", expr("filter(genre, element -> element != '')"))
 
-# drop all genre columns :
+# Drop all genre columns :
 kafka_data = kafka_data.drop(*genre_columns)
 
 # Change the type of "release_date" from string to date :
@@ -142,23 +156,17 @@ kafka_data = kafka_data.withColumn(
 )
 
 # Select my data for my index :
-movies_user_rating = kafka_data.select("userId", "movieId", "rating", "timestamp", "age", "gender")
+movies_user_rating = kafka_data.select("userId", "movieId", "rating", "timestamp", "age", "gender","release_date","movie_title","genre")
 
 movies_info = kafka_data.select("movieId", "movie_title", "release_date", "genre", "IMDb_URL")
 
-##################  Elasticsearch  agregation  ##################
+user_info = kafka_data.select("userId", "gender", "age")
 
-# get rating from elasticsearch and generat the avrage :
-# es = Elasticsearch(cloud_id=cloud_id, api_key=api_key)
-# agregation :
-# movies_ratings_df =  movies_ratings_df.withColumn("timestamp")
-
-#################################################################
 
 # Print the schema of my Data :
 movies_user_rating.printSchema()
 movies_info.printSchema()
-
+user_info.printSchema()
 
 def write_to_elasticsearch(df, index_name, id_option=True):
 
@@ -172,7 +180,8 @@ def write_to_elasticsearch(df, index_name, id_option=True):
         .option("es.net.http.auth.pass", password) \
         .option("es.nodes.wan.only", "true") \
         .option("es.write.operation", "index") \
-        .option("checkpointLocation", f"./checkpoint_{index_name}/")
+        .option("checkpointLocation", f"./checkpoint_{index_name}/")\
+        .option("es.mapping.date.rich", "false") \
     
     if id_option != True :
         query.option("es.mapping.id", id_option)
@@ -180,13 +189,16 @@ def write_to_elasticsearch(df, index_name, id_option=True):
     query.start().awaitTermination()
 
 # Separate threads for each DataFrame :
-thread_movies_user_rating = threading.Thread(target=write_to_elasticsearch, args=(movies_user_rating, "movies_user_rating"))
-thread_movies_info = threading.Thread(target=write_to_elasticsearch, args=(movies_info, "movies_info","movieId"))
+thread_movies_user_rating = threading.Thread(target=write_to_elasticsearch, args=(movies_user_rating, "movies-user_rating"))
+thread_movies_info = threading.Thread(target=write_to_elasticsearch, args=(movies_info, "movies-info","movieId"))
+thread_user_info = threading.Thread(target=write_to_elasticsearch, args=(user_info, "user-info","userId"))
 
 # Start both threads :
 thread_movies_user_rating.start()
 thread_movies_info.start()
+thread_user_info.start()
 
 # Wait for both threads to finish :
 thread_movies_user_rating.join()
 thread_movies_info.join()
+thread_user_info.join()
