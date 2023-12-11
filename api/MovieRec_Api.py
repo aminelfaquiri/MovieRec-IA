@@ -4,15 +4,9 @@ from flask import Flask, jsonify, abort
 app = Flask(__name__)
 
 # Read JSON data from file :
-with open('api/movies.json') as f:
+with open('api/movies_shuffled.json') as f:
     json_data = json.load(f)
 
-@app.route('/api/movies', methods=['GET'])
-def get_movies():
-    if json_data :
-        return jsonify(json_data)
-    else :
-        abort(404, f'Data not found')
 
 @app.route('/api/movies/<int:page>', methods=['GET'])
 def get_movies_page(page):
