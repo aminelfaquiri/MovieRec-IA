@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommender</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+
+        h1, h2 {
+            color: #007bff;
+            margin-bottom: 20px;
+            margin-top: 20px;
+        }
+
+        form {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        input {
+            padding: 10px;
+            width: 100%;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px;
+            width: 100%;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            border: 1px solid #dee2e6;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        p {
+            margin: 0;
+        }
+
+        .movie-container {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .movie-box {
+            width: 48%;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff;
+            margin-bottom: 20px;
+        }
+
+        .movie-info {
+            display: flex;
+            align-items: center;
+        }
+
+        .movie-info img {
+            max-width: 200px;
+            max-height: 300px;
+            margin-right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Movie Recommender</h1>
+
+    <form method="post">
+        {{ form.csrf_token }}
+        <label for="{{ form.movie_name.id }}">Enter Movie Name:</label>
+        {{ form.movie_name(class="form-control", placeholder="Movie name", required="required") }}
+        <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+
+    {% if result %}
+        <h2>Your Movie</h2>
+        <div class="movie-box">
+            <div class="movie-info">
+                <!-- <img src="https://i.pinimg.com/564x/62/98/c9/6298c9062d27ae97f168d4ac61f04d4a.jpg" alt="Movie Poster"> -->
+                <div>
+                    <p><strong>Title:</strong> {{ result['Your Movies']['movie_title'] }}</p>
+                    <p><strong>Release Date:</strong> {{ result['Your Movies']['release_date'] }}</p>
+                    <p><strong>Rating:</strong> {{ result['Your Movies']['rating'] }}</p>
+                    <p><strong>Genre Names:</strong> {{ result['Your Movies']['genre'] }}</p>
+                </div>
+            </div>
+        </div>
+
+        <h2>Recommendations</h2>
+        <ul class="movie-container">
+            {% for movie in result['recommendations'] %}
+                <li class="movie-box">
+                    <div class="movie-info">
+                        <!-- <img src="https://i.pinimg.com/564x/62/98/c9/6298c9062d27ae97f168d4ac61f04d4a.jpg" alt="Movie Poster"> -->
+                        <div>
+                            <p><strong>Title:</strong> {{ movie['movie_title'] }}</p>
+                            <p><strong>Release Date:</strong> {{ movie['release_date'] }}</p>
+                            <p><strong>Rating:</strong> {{ movie['rating'] }}</p>
+                            <p><strong>Genres:</strong> {{ movie['genre'] | join(', ') }}</p>
+                        </div>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>
